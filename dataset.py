@@ -93,7 +93,8 @@ def _load_dataset(dataroot, name, img_id2val):
         utils.assert_eq(question['question_id'], answer['question_id'])
         utils.assert_eq(question['image_id'], answer['image_id'])
         img_id = question['image_id']
-        entries.append(_create_entry(img_id2val[img_id], question, answer))
+        if img_id in img_id2val:
+            entries.append(_create_entry(img_id2val[img_id], question, answer))
 
     return entries
 

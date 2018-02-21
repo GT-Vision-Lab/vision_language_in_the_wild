@@ -35,6 +35,7 @@ val_ids_file = 'data/val_ids.pkl'
 
 feature_length = 2048
 num_fixed_boxes = 36
+data_frac = 0.01
 
 
 if __name__ == '__main__':
@@ -52,20 +53,22 @@ if __name__ == '__main__':
 
     train_indices = {}
     val_indices = {}
+    train_len = int(len(train_imgids) * data_frac)
+    val_len = int(len(val_imgids) * data_frac)
 
     train_img_features = h_train.create_dataset(
-        'image_features', (len(train_imgids), num_fixed_boxes, feature_length), 'f')
+        'image_features', (train_len, num_fixed_boxes, feature_length), 'f')
     train_img_bb = h_train.create_dataset(
-        'image_bb', (len(train_imgids), num_fixed_boxes, 4), 'f')
+        'image_bb', (train_len, num_fixed_boxes, 4), 'f')
     train_spatial_img_features = h_train.create_dataset(
-        'spatial_features', (len(train_imgids), num_fixed_boxes, 6), 'f')
+        'spatial_features', (train_len, num_fixed_boxes, 6), 'f')
 
     val_img_bb = h_val.create_dataset(
-        'image_bb', (len(val_imgids), num_fixed_boxes, 4), 'f')
+        'image_bb', (val_len, num_fixed_boxes, 4), 'f')
     val_img_features = h_val.create_dataset(
-        'image_features', (len(val_imgids), num_fixed_boxes, feature_length), 'f')
+        'image_features', (val_len, num_fixed_boxes, feature_length), 'f')
     val_spatial_img_features = h_val.create_dataset(
-        'spatial_features', (len(val_imgids), num_fixed_boxes, 6), 'f')
+        'spatial_features', (val_len, num_fixed_boxes, 6), 'f')
 
     train_counter = 0
     val_counter = 0
@@ -106,6 +109,8 @@ if __name__ == '__main__':
                 axis=1)
 
             if image_id in train_imgids:
+                if train_counter >= train_len:
+                    continue
                 train_imgids.remove(image_id)
                 train_indices[image_id] = train_counter
                 train_img_bb[train_counter, :, :] = bboxes
@@ -115,6 +120,8 @@ if __name__ == '__main__':
                 train_spatial_img_features[train_counter, :, :] = spatial_features
                 train_counter += 1
             elif image_id in val_imgids:
+                if val_counter >= val_len:
+                    continue
                 val_imgids.remove(image_id)
                 val_indices[image_id] = val_counter
                 val_img_bb[val_counter, :, :] = bboxes
@@ -125,12 +132,14 @@ if __name__ == '__main__':
                 val_counter += 1
             else:
                 assert False, 'Unknown image id: %d' % image_id
+            if train_counter >= train_len and val_counter >= val_len:
+                break
 
-    if len(train_imgids) != 0:
-        print('Warning: train_image_ids is not empty')
+    #if len(train_imgids) != 0:
+    #    print('Warning: train_image_ids is not empty')
 
-    if len(val_imgids) != 0:
-        print('Warning: val_image_ids is not empty')
+    #if len(val_imgids) != 0:
+    #    print('Warning: val_image_ids is not empty')
 
     cPickle.dump(train_indices, open(train_indices_file, 'wb'))
     cPickle.dump(val_indices, open(val_indices_file, 'wb'))
