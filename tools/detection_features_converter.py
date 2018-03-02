@@ -35,7 +35,7 @@ val_ids_file = 'data/val_ids.pkl'
 
 feature_length = 2048
 num_fixed_boxes = 36
-data_frac = 0.01
+data_frac = 1.0
 
 
 if __name__ == '__main__':

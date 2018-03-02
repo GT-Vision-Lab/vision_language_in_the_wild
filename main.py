@@ -2,6 +2,7 @@ import argparse
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SequentialSampler
 import numpy as np
 
 from dataset import Dictionary, VQAFeatureDataset
@@ -40,6 +41,6 @@ if __name__ == '__main__':
 
     model = nn.DataParallel(model).cuda()
 
-    train_loader = DataLoader(train_dset, batch_size, shuffle=True, num_workers=1)
-    eval_loader =  DataLoader(eval_dset, batch_size, shuffle=True, num_workers=1)
+    train_loader = DataLoader(train_dset, batch_size, sampler=SequentialSampler(train_dset), num_workers=1)
+    eval_loader =  DataLoader(eval_dset, batch_size, sampler=SequentialSampler(eval_dset), num_workers=1)
     train(model, train_loader, eval_loader, args.epochs, args.output)
