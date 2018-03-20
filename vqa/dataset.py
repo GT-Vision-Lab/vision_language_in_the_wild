@@ -1,12 +1,15 @@
 from __future__ import print_function
 import os
 import json
-import cPickle
+import sys
+if sys.version_info[0] < 3:
+    import cPickle
+else:
+    import _pickle as cPickle
 import numpy as np
 import utils
 import h5py
-import torch
-from torch.utils.data import Dataset
+import tensorflow as tf
 
 
 class Dictionary(object):
@@ -95,11 +98,9 @@ def _load_dataset(dataroot, name, img_id2val):
         if img_id in img_id2val:
             yield _create_entry(img_id2val[img_id], question, answer)
 
-            
 
-class VQAFeatureDataset(Dataset):
+class VQAFeatureDataset:
     def __init__(self, name, dictionary, dataroot='data'):
-        super(VQAFeatureDataset, self).__init__()
         assert name in ['train', 'val']
         self.name = name
         self.dataroot = dataroot
@@ -113,9 +114,9 @@ class VQAFeatureDataset(Dataset):
         self.dictionary = dictionary
 
         self.img_id2idx = cPickle.load(
-            open(os.path.join(dataroot, '%s36_imgid2idx.pkl' % name)))
+            open(os.path.join(dataroot, '{}36_imgid2idx.pkl'.format(name)), 'rb'))
         print('loading features from h5 file')
-        self.h5_path = os.path.join(dataroot, '%s36.hdf5' % name)
+        self.h5_path = os.path.join(dataroot, '{}36.hdf5'.format(name))
         #with h5py.File(self.h5_path, 'r') as hf:
         #    self.features = np.array(hf.get('image_features'))
         #    self.spatials = np.array(hf.get('spatial_features'))
@@ -125,14 +126,14 @@ class VQAFeatureDataset(Dataset):
 
 
         self.entries = _load_dataset(dataroot, name, self.img_id2idx)
+        self.size = len(cPickle.load(open(os.path.join(dataroot, 'cache', '%s_target.pkl' % name), 'rb')))
 
         with h5py.File(self.h5_path, 'r') as hf:
             self.v_dim = np.array(hf['image_features'][0]).shape[1]
             self.s_dim = np.array(hf['spatial_features'][0]).shape[1]
             print("v_dim: " + str(self.v_dim))
             print("s_dim: " + str(self.s_dim))
-        
-        self.entries = _load_dataset(dataroot, name, self.img_id2idx)
+
 
     def tokenize(self, entry, max_length=14):
         """Tokenizes the questions.
@@ -150,45 +151,43 @@ class VQAFeatureDataset(Dataset):
         entry['q_token'] = tokens
         return entry
 
-    def tensorize(self, entry):
-        question = torch.from_numpy(np.array(entry['q_token']))
-        entry['q_token'] = question
 
+def tensorflow_generator(name, dictionary, batch_size=1, dataroot='data'):
+    vqa_dataset = VQAFeatureDataset(name, dictionary, dataroot)
+    def tensorflowize(entry):
+        if not entry:
+            raise StopIteration
+        entry = vqa_dataset.tokenize(entry)
+        question = np.array(entry['q_token'])
         answer = entry['answer']
         labels = np.array(answer['labels'])
         scores = np.array(answer['scores'], dtype=np.float32)
         if len(labels):
-            labels = torch.from_numpy(labels)
-            scores = torch.from_numpy(scores)
-            entry['answer']['labels'] = labels
-            entry['answer']['scores'] = scores
+            labels = np.expand_dims(labels, axis=0)
+            target = np.zeros(vqa_dataset.num_ans_candidates)
+            target[labels] = scores
         else:
-            entry['answer']['labels'] = None
-            entry['answer']['scores'] = None
-        return entry
+            return None
+        with h5py.File(vqa_dataset.h5_path, 'r') as hf:
+            features = np.array(hf['image_features'][entry['image']])
+            spatials = np.array(hf['spatial_features'][entry['image']])
+            # Output: v, b, q, a
+            ans = (features, spatials, question, target)
+            return ans
+    def gen():
+        batch = []
+        while True:
+            result = tensorflowize(next(vqa_dataset.entries))
+            if result:
+                batch.append(result)
+            if batch_size == len(batch):
+                ans = tuple(np.stack([x[i] for x in batch]) for i in (0,1,2,3))
+                batch = []
+                yield ans
+    return gen
 
-    def __getitem__(self, index):
-        entry = next(self.entries)
-        if not entry:
-            self.entries = _load_dataset(self.dataroot, self.name, self.img_id2idx)
-            entry = next(self.entries)
-        entry = self.tensorize(self.tokenize(entry))
-
-        with h5py.File(self.h5_path, 'r') as hf:
-            features = torch.from_numpy(np.array(hf['image_features'][entry['image']]))
-            spatials = torch.from_numpy(np.array(hf['spatial_features'][entry['image']]))
-        #features = self.features[entry['image']]
-        #spatials = self.spatials[entry['image']]
-
-        question = entry['q_token']
-        answer = entry['answer']
-        labels = answer['labels']
-        scores = answer['scores']
-        target = torch.zeros(self.num_ans_candidates)
-        if labels is not None:
-            target.scatter_(0, labels, scores)
-
-        return features, spatials, question, target
-
-    def __len__(self):
-        return len(self.img_id2idx)
+class VQA_Dataset(tf.data.Dataset):
+    def __init__(self, name, dictionary, dataroot='data'):
+        self = tf.data.Dataset.from_generator(tensorflow_generator(name, dictionary, dataroot), (tf.int32, tf.float32, tf.float32, tf.float32, tf.float32), (tf.TensorShape([14]), tf.TensorShape([1]), tf.TensorShape([1]), tf.TensorShape([36, 2048]), tf.TensorShape([36, 6])))
+        self.name = name
+        self.dataroot = dataroot

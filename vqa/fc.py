@@ -1,6 +1,7 @@
 from __future__ import print_function
 import torch.nn as nn
 from torch.nn.utils.weight_norm import weight_norm
+import tensorflow as tf
 
 
 class FCNet(nn.Module):
@@ -22,6 +23,14 @@ class FCNet(nn.Module):
 
     def forward(self, x):
         return self.main(x)
+
+def fc_net(x, dims, training):
+    for i in range(len(dims)-1):
+        out_dim = dims[i+1]
+        x = tf.layers.dense(x, out_dim)
+        x = tf.layers.batch_normalization(x, training=training)
+        x = tf.nn.relu(x)
+    return x
 
 
 if __name__ == '__main__':

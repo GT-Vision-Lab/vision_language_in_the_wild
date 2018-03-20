@@ -1,85 +1,64 @@
 import os
 import time
-import torch
-import torch.nn as nn
 import utils
-from torch.autograd import Variable
+from tqdm import tqdm
+import tensorflow as tf
 
 
-def instance_bce_with_logits(logits, labels):
-    assert logits.dim() == 2
+def tf_train(model_fn, train_dataset, train_gen, val_dataset, val_gen, num_epochs, batch_size, debug, output):
+    best_val_score = 0
+    optim = tf.train.AdamOptimizer(1e-4)
+    # Visual feature input: Batch size, obj per image, features per obj
+    v = tf.placeholder(tf.float32, shape=[None, 36, train_dataset.v_dim])
+    # Bounding box input: batch size, boxes per image, coords per box
+    b = tf.placeholder(tf.float32, shape=[None, 36, 6])
+    # Question word input: Batch size, 14 words
+    q = tf.placeholder(tf.int32, shape=[None, 14])
+    # Labels input: Batch size, num answers
+    a = tf.placeholder(tf.float32, shape=[None, train_dataset.num_ans_candidates])
+    # Training flag
+    training = tf.placeholder(tf.bool)
+    # Runs the model
+    pred = model_fn(v, b, q, training)
+    loss = tf.nn.softmax_cross_entropy_with_logits(labels=a, logits=pred)
+    loss_total = tf.reduce_sum(loss)
+    train_op = optim.minimize(loss)
+    score = tf.reduce_sum(tf.cast(tf.equal(tf.argmax(pred, 1), tf.argmax(a, 1)), tf.float32))
+    init_op = tf.global_variables_initializer()
+    saver = tf.train.Saver()
 
-    loss = nn.functional.binary_cross_entropy_with_logits(logits, labels)
-    loss *= labels.size(1)
-    return loss
+    with tf.Session() as sess:
+        sess.run(init_op)
 
+        for epoch in range(num_epochs):
+            total_loss = 0
+            train_score = 0
+            train_count = 0
+            t = time.time()
 
-def compute_score_with_logits(logits, labels):
-    logits = torch.max(logits, 1)[1].data # argmax
-    one_hots = torch.zeros(*labels.size()).cuda()
-    one_hots.scatter_(1, logits.view(-1, 1), 1)
-    scores = (one_hots * labels)
-    return scores
+            for (v_, b_, q_, a_) in tqdm(train_gen()(), total=train_dataset.size/batch_size):
+                if debug and train_count > 20:
+                    break
+                train_count += 1
+                temp_loss, temp_score, _ = sess.run([loss_total, score, train_op], feed_dict={v: v_, b: b_, q: q_, a: a_, training: True})
+                total_loss += temp_loss
+                train_score += temp_score
+            total_loss /= train_count * batch_size
+            train_score /= train_count * batch_size
 
+            val_score = 0
+            val_count = 0
+            for (v_, b_, q_, a_) in tqdm(val_gen()(), total=val_dataset.size/batch_size):
+                if debug and val_count > 10:
+                    break
+                val_count += 1
+                val_score += sess.run(score, feed_dict={v: v_, b: b_, q: q_, a: a_, training: False})
+            val_score /= val_count * batch_size
 
-def train(model, train_loader, eval_loader, num_epochs, output):
-    utils.create_dir(output)
-    optim = torch.optim.Adamax(model.parameters())
-    logger = utils.Logger(os.path.join(output, 'log.txt'))
-    best_eval_score = 0
+            print('Epoch {} - Time: {} seconds'.format(epoch+1, time.time()-t))
+            print('Train loss: {}, score {}%'.format(total_loss, round(train_score * 100, 2)))
+            print('Val score: {}%'.format(round(val_score * 100, 2)))
 
-    for epoch in range(num_epochs):
-        total_loss = 0
-        train_score = 0
-        t = time.time()
-
-        for i, (v, b, q, a) in enumerate(train_loader):
-            v = Variable(v).cuda()
-            b = Variable(b).cuda()
-            q = Variable(q).cuda()
-            a = Variable(a).cuda()
-
-            pred = model(v, b, q, a)
-            loss = instance_bce_with_logits(pred, a)
-            loss.backward()
-            nn.utils.clip_grad_norm(model.parameters(), 0.25)
-            optim.step()
-            optim.zero_grad()
-
-            batch_score = compute_score_with_logits(pred, a.data).sum()
-            total_loss += loss.data[0] * v.size(0)
-            train_score += batch_score
-
-        total_loss /= len(train_loader.dataset)
-        train_score = 100 * train_score / len(train_loader.dataset)
-        model.train(False)
-        eval_score, bound = evaluate(model, eval_loader)
-        model.train(True)
-
-        logger.write('epoch %d, time: %.2f' % (epoch, time.time()-t))
-        logger.write('\ttrain_loss: %.2f, score: %.2f' % (total_loss, train_score))
-        logger.write('\teval score: %.2f (%.2f)' % (100 * eval_score, 100 * bound))
-
-        if eval_score > best_eval_score:
-            model_path = os.path.join(output, 'model.pth')
-            torch.save(model.state_dict(), model_path)
-            best_eval_score = eval_score
-
-
-def evaluate(model, dataloader):
-    score = 0
-    upper_bound = 0
-    num_data = 0
-    for v, b, q, a in iter(dataloader):
-        v = Variable(v, volatile=True).cuda()
-        b = Variable(b, volatile=True).cuda()
-        q = Variable(q, volatile=True).cuda()
-        pred = model(v, b, q, None)
-        batch_score = compute_score_with_logits(pred, a.cuda()).sum()
-        score += batch_score
-        upper_bound += (a.max(1)[0]).sum()
-        num_data += pred.size(0)
-
-    score = score / len(dataloader.dataset)
-    upper_bound = upper_bound / len(dataloader.dataset)
-    return score, upper_bound
+            if val_score > best_val_score:
+                save_path = saver.save(sess, output)
+                print("Model saved at {}".format(save_path))

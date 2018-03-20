@@ -1,14 +1,11 @@
 import argparse
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
-from torch.utils.data.sampler import SequentialSampler
 import numpy as np
 
-from dataset import Dictionary, VQAFeatureDataset
+from dataset import Dictionary, VQAFeatureDataset, VQA_Dataset, tensorflow_generator
 import base_model
-from train import train
+from train import tf_train
 import utils
+import tensorflow as tf
 
 
 def parse_args():
@@ -19,28 +16,17 @@ def parse_args():
     parser.add_argument('--output', type=str, default='saved_models/exp0')
     parser.add_argument('--batch_size', type=int, default=512)
     parser.add_argument('--seed', type=int, default=1111, help='random seed')
+    parser.add_argument('--debug', type=bool, default=False)
     args = parser.parse_args()
     return args
 
-
 if __name__ == '__main__':
     args = parse_args()
-
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    torch.backends.cudnn.benchmark = True
-
     dictionary = Dictionary.load_from_file('data/dictionary.pkl')
-    train_dset = VQAFeatureDataset('train', dictionary)
-    eval_dset = VQAFeatureDataset('val', dictionary)
     batch_size = args.batch_size
-
-    constructor = 'build_%s' % args.model
-    model = getattr(base_model, constructor)(train_dset, args.num_hid).cuda()
-    model.w_emb.init_embedding('data/glove6b_init_300d.npy')
-
-    model = nn.DataParallel(model).cuda()
-
-    train_loader = DataLoader(train_dset, batch_size, sampler=SequentialSampler(train_dset), num_workers=1)
-    eval_loader =  DataLoader(eval_dset, batch_size, sampler=SequentialSampler(eval_dset), num_workers=1)
-    train(model, train_loader, eval_loader, args.epochs, args.output)
+    train_dset = VQAFeatureDataset('train', dictionary)
+    train_gen = lambda: tensorflow_generator('train', dictionary, batch_size=batch_size)
+    val_dset = VQAFeatureDataset('val', dictionary)
+    val_gen = lambda: tensorflow_generator('val', dictionary, batch_size=batch_size)
+    model_fn = base_model.tf_baseline(train_dset, args.num_hid)
+    tf_train(model_fn, train_dset, train_gen, val_dset, val_gen, args.epochs, batch_size, args.debug, args.output)

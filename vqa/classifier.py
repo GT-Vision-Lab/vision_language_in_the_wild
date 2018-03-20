@@ -1,5 +1,6 @@
 import torch.nn as nn
 from torch.nn.utils.weight_norm import weight_norm
+import tensorflow as tf
 
 
 class SimpleClassifier(nn.Module):
@@ -16,3 +17,12 @@ class SimpleClassifier(nn.Module):
     def forward(self, x):
         logits = self.main(x)
         return logits
+
+def simple_classifier(x, out_dim, hid_dim, dropout, training):
+    x = tf.layers.dense(x, hid_dim)
+    x = tf.layers.batch_normalization(x, training=training)
+    x = tf.nn.relu(x)
+    x = tf.layers.dropout(x, dropout, training=training)
+    x = tf.layers.dense(x, out_dim)
+    return x
+
