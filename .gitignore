@@ -8,5 +8,6 @@ task.sh
 *.pth
 new_logs*
 *.txt
+*.wav
 models/
 saved_models/
