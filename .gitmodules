@@ -1,0 +1,6 @@
+[submodule "deepspeech.pytorch"]
+	path = deepspeech.pytorch
+	url = https://github.com/SeanNaren/deepspeech.pytorch
+[submodule "bottom-up-attention-vqa"]
+	path = bottom-up-attention-vqa
+	url = https://github.com/jiasenlu/bottom-up-attention-vqa
