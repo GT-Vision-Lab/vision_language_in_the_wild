@@ -14,7 +14,7 @@ input_path = './phrases.json'
 parser = argparse.ArgumentParser(description="Use a remote TTS API to generate audio for prompts.")
 parser.add_argument("--input_path", type=str, help="Path to json containing list of phrases.", default='./phrases.json')
 parser.add_argument("--api", type=str, help="Choice of API", choices=["AWS"], default="AWS")
-parser.add_argument("--voice", type=str, help="Choice of speaker", choices=["Joanna", "Matthew"], default=None)
+parser.add_argument("--voice", type=str, help="Name of speaker", default=None)
 parser.add_argument("--sample_rate", type=int, help="Samples per second", choices=[8000, 16000], default=16000)
 parser.add_argument("--output_path", type=str, help="Folder to save files to")
 parser.add_argument("--audio_format", type=str, help="File format for audio files", choices=["wav"], default="wav")
