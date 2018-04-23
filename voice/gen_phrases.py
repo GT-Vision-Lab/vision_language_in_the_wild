@@ -24,7 +24,6 @@ parser.add_argument("--input_path", type=str, help="Path to json containing list
 parser.add_argument("--api", type=str, help="Choice of API", choices=["AWS"], default="AWS")
 parser.add_argument("--voice", type=str, help="Name of speaker", default=None)
 parser.add_argument("--sample_rate", type=int, help="Samples per second", choices=[8000, 16000], default=16000)
-parser.add_argument("--output_path", type=str, help="Folder to save files to")
 parser.add_argument("--audio_format", type=str, help="File format for audio files", choices=["wav"], default="wav")
 parser.add_argument("--emphasis", type=str, help="Level of emphasis on voice", choices=["none", "some", "lots"], default="none")
 args = parser.parse_args()
@@ -39,7 +38,7 @@ with open(args.input_path, 'rb') as f:
 session = Session(profile_name="default")
 polly = session.client("polly")
 
-for text in tqdm(phrases, total=len(phrases), unit="phrases", desc=args.api):
+for idx, text in enumerate(tqdm(phrases[0:2], total=len(phrases), unit="phrases", desc=args.api)):
     try:
         if args.emphasis is "none":
             response = polly.synthesize_speech(Text=text, OutputFormat="pcm", VoiceId=args.voice, SampleRate=str(args.sample_rate))
@@ -53,9 +52,11 @@ for text in tqdm(phrases, total=len(phrases), unit="phrases", desc=args.api):
     
     if "AudioStream" in response:
         with closing(response["AudioStream"]) as stream:
-            if not os.path.exists(args.voice):
-                os.makedirs(args.voice)
-            output = (args.output_path or "./{}/{}.{}").format(args.voice, text, args.audio_format)
+            if not os.path.exists("questions"):
+                os.makedirs("questions")
+            if not os.path.exists("questions/{}".format(args.voice)):
+                os.makedirs("questions/{}".format(args.voice))
+            output = "./questions/{}/{}.{}".format(args.voice, idx, args.audio_format)
             try:
                 with wave.open(output, 'wb') as wav:
                     wav.setparams((1, 2, args.sample_rate, 0, 'NONE', 'NONE'))
@@ -68,5 +69,5 @@ for text in tqdm(phrases, total=len(phrases), unit="phrases", desc=args.api):
         sys.exit(-1)
 
 print("Done")
-print("Saved {} wav files to {}.".format(len(phrases), args.output_path or "./{}".format(args.voice)))
+print("Saved {} wav files to {}.".format(len(phrases), "./questions/{}".format(args.voice)))
 print("Characters spent: " + str(sum(map(len, phrases))))

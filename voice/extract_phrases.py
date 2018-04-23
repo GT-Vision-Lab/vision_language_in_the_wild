@@ -1,6 +1,8 @@
 #! /usr/bin/python3
 import json
 import pickle
+import os
+import pdb
 
 decoder = json.JSONDecoder()
 
@@ -20,11 +22,9 @@ questions = {}
 for q in trainQ["questions"]:
     qq = q["question"]
     if qq in questions:
-        if not questions[qq]:
-            questions[qq] = []
-        questions[qq] = questions[qq].append((q["question_id"], q["image_id"]))
+        questions[qq] = questions[qq].append(q["question_id"])
     else:
-        questions[qq] = [(q["question_id"], q["image_id"])]
+        questions[qq] = [q["question_id"]]
 
 trainQuestions = questions
 questions = {}
@@ -32,11 +32,9 @@ questions = {}
 for q in valQ["questions"]:
     qq = q["question"]
     if qq in questions:
-        if not questions[qq]:
-            questions[qq] = []
-        questions[qq] = questions[qq].append((q["question_id"], q["image_id"]))
+        questions[qq] = questions[qq].append(q["question_id"])
     else:
-        questions[qq] = [(q["question_id"], q["image_id"])]
+        questions[qq] = [q["question_id"]]
 
 valQuestions = questions
 '''
@@ -87,7 +85,7 @@ print("Val questions characters: " + str(valQChars))
 #print("Dev questions characters: " + str(devQChars))
 #print("Test question count: " + str(testQLen))
 #print("Test questions characters: " + str(testQChars))
-print("Total Question characters: " + str(trainQChars + valQChars + devQChars + testQChars))
+print("Total Question characters: " + str(trainQChars + valQChars))
 print("Total Question characters merged: " + str(sum(map(len, list(questions)))))
 #print("Answer characters: " + str(totalAChars))
 #print("Total Question + Answer characters: " + str(totalQChars + totalAChars))
@@ -96,3 +94,29 @@ output = list(questions)
 
 with open('phrases.json', 'w') as f:
     json.dump(output, f)
+
+if not os.path.exists('questions'):
+    os.makedirs('questions')
+
+if not os.path.exists('questions/text'):
+    os.makedirs('questions/text')
+
+for i, t in enumerate(output):
+    with open('questions/text/{:06d}.txt'.format(i), 'w') as f:
+        f.write(t)
+
+qidTovid = dict()
+for text, qids in trainQuestions.items():
+    try:
+        for qid in [q[0] for q in qids]:
+            qidTovid[qid] = output.index(text)
+    except Exception:
+        print(qids)
+for text, qids in valQuestions.items():
+    for qid in [q[0] for q in qids]:
+        qidTovid[qid] = output.index(text)
+
+with open('qidtovid.pkl', 'wb') as f:
+    pickle.dump(qidTovid, f)
+
+print("DONE")
