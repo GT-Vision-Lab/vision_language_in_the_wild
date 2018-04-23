@@ -9,6 +9,7 @@ import sys
 import json
 import argparse
 
+'''
 input_path = './phrases.json'
 voice = "Matthew"
 api = "AWS"
@@ -16,8 +17,8 @@ sample_rate = 16000
 output_path = None
 audio_format = "wav"
 emphasis = "none"
-
 '''
+
 parser = argparse.ArgumentParser(description="Use a remote TTS API to generate audio for prompts.")
 parser.add_argument("--input_path", type=str, help="Path to json containing list of phrases.", default='./phrases.json')
 parser.add_argument("--api", type=str, help="Choice of API", choices=["AWS"], default="AWS")
@@ -26,37 +27,38 @@ parser.add_argument("--sample_rate", type=int, help="Samples per second", choice
 parser.add_argument("--output_path", type=str, help="Folder to save files to")
 parser.add_argument("--audio_format", type=str, help="File format for audio files", choices=["wav"], default="wav")
 parser.add_argument("--emphasis", type=str, help="Level of emphasis on voice", choices=["none", "some", "lots"], default="none")
-parser.parse_args()
-'''
+args = parser.parse_args()
 
-if not voice:
+if not args.voice:
     print("Name of speaker ('--voice')")
     sys.exit(-1)
 
-with open(input_path, 'rb') as f:
+with open(args.input_path, 'rb') as f:
     phrases = json.load(f)
 
 session = Session(profile_name="default")
 polly = session.client("polly")
 
-for text in tqdm(phrases, total=len(phrases), unit="phrases", desc=api):
+for text in tqdm(phrases, total=len(phrases), unit="phrases", desc=args.api):
     try:
-        if emphasis is "none":
-            response = polly.synthesize_speech(Text=text, OutputFormat="pcm", VoiceId=voice, SampleRate=sample_rate)
+        if args.emphasis is "none":
+            response = polly.synthesize_speech(Text=text, OutputFormat="pcm", VoiceId=args.voice, SampleRate=str(args.sample_rate))
         else:
-            emphasis_tags = ("<emphasis>" if emphasis is "some" else "<emphasis level=\"strong\">", "</emphasis>")
+            emphasis_tags = ("<emphasis>" if args.emphasis is "some" else "<emphasis level=\"strong\">", "</emphasis>")
             request_text = "<speech>" + emphasis_tags[0] + text + emphasis_tags[1] + "</speech>"
-            response = polly.synthesize_speech(Text=request_text, OutputFormat="pcm", VoiceId=voice, SampleRate=sample_rate, Type="ssml")
+            response = polly.synthesize_speech(Text=request_text, OutputFormat="pcm", VoiceId=args.voice, SampleRate=args.sample_rate, Type="ssml")
     except (BotoCoreError, ClientError) as error:
         print(error)
         sys.exit(-1)
     
     if "AudioStream" in response:
         with closing(response["AudioStream"]) as stream:
-            output = (output_path or "./{}/{}.wav").format(voice, text)
+            if not os.path.exists(args.voice):
+                os.makedirs(args.voice)
+            output = (args.output_path or "./{}/{}.{}").format(args.voice, text, args.audio_format)
             try:
                 with wave.open(output, 'wb') as wav:
-                    wav.setparams((1, 2, sample_rate, 0, 'NONE', 'NONE'))
+                    wav.setparams((1, 2, args.sample_rate, 0, 'NONE', 'NONE'))
                     wav.writeframes(stream.read())
             except IOError as error:
                 print(error)
@@ -66,5 +68,5 @@ for text in tqdm(phrases, total=len(phrases), unit="phrases", desc=api):
         sys.exit(-1)
 
 print("Done")
-print("Saved {} wav files to {}.".format(len(phrases), output_path or "./{}".format(voice)))
+print("Saved {} wav files to {}.".format(len(phrases), args.output_path or "./{}".format(args.voice)))
 print("Characters spent: " + str(sum(map(len, phrases))))
