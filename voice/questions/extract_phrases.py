@@ -6,9 +6,9 @@ import pdb
 
 decoder = json.JSONDecoder()
 
-with open('../bottom-up-attention-vqa/data/v2_OpenEnded_mscoco_train2014_questions.json', 'r') as f:
+with open('../../bottom-up-attention-vqa/data/v2_OpenEnded_mscoco_train2014_questions.json', 'r') as f:
     trainQ = decoder.decode(f.read())
-with open('../bottom-up-attention-vqa/data/v2_OpenEnded_mscoco_val2014_questions.json', 'r') as f:
+with open('../../bottom-up-attention-vqa/data/v2_OpenEnded_mscoco_val2014_questions.json', 'r') as f:
     valQ = decoder.decode(f.read())
 #with open('../bottom-up-attention-vqa/data/v2_OpenEnded_mscoco_test-dev2015_questions.json', 'r') as f:
 #    devQ = decoder.decode(f.read())
@@ -17,11 +17,13 @@ with open('../bottom-up-attention-vqa/data/v2_OpenEnded_mscoco_val2014_questions
 #with open('./answers/lookup.pkl', 'rb') as f:
 #    ansData = pickle.load(f)
 
-questions = {}
+questions = dict()
 
 for q in trainQ["questions"]:
     qq = q["question"]
     if qq in questions:
+        if not questions[qq]:
+            questions[qq] = []
         questions[qq] = questions[qq].append(q["question_id"])
     else:
         questions[qq] = [q["question_id"]]
@@ -32,6 +34,8 @@ questions = {}
 for q in valQ["questions"]:
     qq = q["question"]
     if qq in questions:
+        if not questions[qq]:
+            questions[qq] = []
         questions[qq] = questions[qq].append(q["question_id"])
     else:
         questions[qq] = [q["question_id"]]
@@ -95,28 +99,26 @@ output = list(questions)
 with open('phrases.json', 'w') as f:
     json.dump(output, f)
 
-if not os.path.exists('questions'):
-    os.makedirs('questions')
-
-if not os.path.exists('questions/text'):
-    os.makedirs('questions/text')
+if not os.path.exists('text'):
+    os.makedirs('text')
 
 for i, t in enumerate(output):
-    with open('questions/text/{:06d}.txt'.format(i), 'w') as f:
+    with open('text/{:06d}.txt'.format(i), 'w') as f:
         f.write(t)
 
-qidTovid = dict()
-for text, qids in trainQuestions.items():
-    try:
-        for qid in [q[0] for q in qids]:
-            qidTovid[qid] = output.index(text)
-    except Exception:
-        print(qids)
-for text, qids in valQuestions.items():
-    for qid in [q[0] for q in qids]:
-        qidTovid[qid] = output.index(text)
+ques2vid = {k: v for v, k in enumerate(output)}
+qid2vid = dict()
+    
+for q in trainQ["questions"]:
+    qid2vid[q["question_id"]] = ques2vid[q["question"]]
 
-with open('qidtovid.pkl', 'wb') as f:
-    pickle.dump(qidTovid, f)
+for q in valQ["questions"]:
+    qid2vid[q["question_id"]] = ques2vid[q["question"]]
+
+with open('ques2vid.pkl', 'wb') as f:
+    pickle.dump(ques2vid, f)
+
+with open('qid2vid.pkl', 'wb') as f:
+    pickle.dump(qid2vid, f)
 
 print("DONE")

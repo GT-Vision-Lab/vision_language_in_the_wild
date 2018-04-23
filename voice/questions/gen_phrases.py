@@ -52,11 +52,9 @@ for idx, text in enumerate(tqdm(phrases[0:2], total=len(phrases), unit="phrases"
     
     if "AudioStream" in response:
         with closing(response["AudioStream"]) as stream:
-            if not os.path.exists("questions"):
-                os.makedirs("questions")
-            if not os.path.exists("questions/{}".format(args.voice)):
-                os.makedirs("questions/{}".format(args.voice))
-            output = "./questions/{}/{}.{}".format(args.voice, idx, args.audio_format)
+            if not os.path.exists(args.voice):
+                os.makedirs(args.voice)
+            output = "./{}/{}.{}".format(args.voice, idx, args.audio_format)
             try:
                 with wave.open(output, 'wb') as wav:
                     wav.setparams((1, 2, args.sample_rate, 0, 'NONE', 'NONE'))
@@ -69,5 +67,5 @@ for idx, text in enumerate(tqdm(phrases[0:2], total=len(phrases), unit="phrases"
         sys.exit(-1)
 
 print("Done")
-print("Saved {} wav files to {}.".format(len(phrases), "./questions/{}".format(args.voice)))
+print("Saved {} wav files to {}.".format(len(phrases), "./{}".format(args.voice)))
 print("Characters spent: " + str(sum(map(len, phrases))))
